@@ -184,7 +184,7 @@ void ImGui_ImplPS3Pad_NewFrame(float delta_time)
     memset(&pad, 0, sizeof(pad));
 
 #if defined(__PSL1GHT__) || defined(PSL1GHT)
-    int ret = ioPadGetData(0, (padInfoData*)&pad);
+    int ret = ioPadGetData(0, &pad);
 #else
     int ret = cellPadGetData(0, &pad);
 #endif

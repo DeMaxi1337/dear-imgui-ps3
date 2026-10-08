@@ -5,6 +5,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <malloc.h>
+#include <unistd.h>
 
 #include "imgui.h"
 #include "imgui_impl_ps3rsx.h"
@@ -23,7 +24,7 @@
 
 #define SCREEN_WIDTH  1280
 #define SCREEN_HEIGHT 720
-#define CB_SIZE (0x80000)
+#define CB_SIZE       (0x100000) // 1 MB command buffer
 
 static gcmContextData*  g_GcmContext = nullptr;
 static void*            g_CommandBuffer = nullptr;
@@ -37,8 +38,7 @@ static bool InitGraphics()
         return false;
 
 #if defined(__PSL1GHT__) || defined(PSL1GHT)
-    g_GcmContext = rsxInit(CB_SIZE, g_CommandBuffer);
-    if (!g_GcmContext)
+    if (rsxInit(&g_GcmContext, CB_SIZE, CB_SIZE, g_CommandBuffer) != 0)
         return false;
 
     videoConfiguration video_cfg;
@@ -46,7 +46,7 @@ static bool InitGraphics()
     video_cfg.resolution = VIDEO_RESOLUTION_720;
     video_cfg.format     = VIDEO_BUFFER_FORMAT_XRGB;
     video_cfg.pitch      = SCREEN_WIDTH * 4;
-    videoConfigure(&video_cfg);
+    videoConfigure(0, &video_cfg, NULL, 0);
 
     for (int i = 0; i < 2; i++)
     {
@@ -65,7 +65,7 @@ static bool InitGraphics()
 static void SwapBuffers()
 {
 #if defined(__PSL1GHT__) || defined(PSL1GHT)
-    gcmSetFlip(g_GcmContext, g_CurrentBuffer);
+    gcmSetFlip(g_GcmContext, (u8)g_CurrentBuffer);
     rsxFlushBuffer(g_GcmContext);
     gcmSetWaitFlip(g_GcmContext);
 

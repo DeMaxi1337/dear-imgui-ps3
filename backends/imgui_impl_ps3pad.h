@@ -7,7 +7,12 @@
 
 #ifndef IMGUI_DISABLE
 
+#if defined(__PSL1GHT__) || defined(PSL1GHT)
+#include <io/pad.h>
+typedef padData CellPadData;
+#else
 struct CellPadData;
+#endif
 
 enum ImGuiPS3Pad_Stick
 {

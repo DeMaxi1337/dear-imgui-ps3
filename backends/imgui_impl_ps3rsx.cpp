@@ -8,26 +8,53 @@
 #include <stdint.h>
 #include <string.h>
 #include <stdlib.h>
+#include <stddef.h>
 
-// Platform SDK headers compatibility (PSL1GHT vs Official SDK)
 #if defined(__PSL1GHT__) || defined(PSL1GHT)
 #include <rsx/rsx.h>
 #include <rsx/gcm_sys.h>
-#define PS3_GCM_PREFIX(x) rsx##x
+#include <rsx/commands.h>
+
+#define CELL_GCM_LOCATION_MAIN                  GCM_LOCATION_CELL
+#define CELL_GCM_LOCATION_LOCAL                 GCM_LOCATION_RSX
+#define CELL_GCM_FALSE                          GCM_FALSE
+#define CELL_GCM_TRUE                           GCM_TRUE
+#define CELL_GCM_SRC_ALPHA                      GCM_SRC_ALPHA
+#define CELL_GCM_ONE_MINUS_SRC_ALPHA            GCM_ONE_MINUS_SRC_ALPHA
+#define CELL_GCM_FUNC_ADD                       GCM_FUNC_ADD
+#define CELL_GCM_PRIMITIVE_TRIANGLES            GCM_TYPE_TRIANGLES
+#define CELL_GCM_TEXTURE_LINEAR                 GCM_TEXTURE_LINEAR
+#define CELL_GCM_TEXTURE_CLAMP_TO_EDGE          GCM_TEXTURE_CLAMP_TO_EDGE
+#define CELL_GCM_TEXTURE_MAX_ANISO_1            0
+#define CELL_GCM_TEXTURE_CONVOLUTION_QUINCUNX   0
+#define CELL_GCM_TEXTURE_A8R8G8B8               (GCM_TEXTURE_FORMAT_A8R8G8B8 | GCM_TEXTURE_FORMAT_LIN | GCM_TEXTURE_FORMAT_UNRM)
+#define CELL_GCM_TEXTURE_LN                     0
+#define CELL_GCM_TEXTURE_DIMS_2D                2
+#define CELL_GCM_VERTEX_F                       GCM_VERTEX_DATA_TYPE_F32
+#define CELL_GCM_VERTEX_UB                      GCM_VERTEX_DATA_TYPE_U8
+#define CELL_GCM_DRAW_INDEX_ARRAY_TYPE_16       GCM_INDEX_TYPE_16B
+
+#define cellGcmSetDepthTestEnable               rsxSetDepthTestEnable
+#define cellGcmSetDepthMask                     rsxSetDepthMask
+#define cellGcmSetCullFaceEnable                rsxSetCullFaceEnable
+#define cellGcmSetBlendEnable                   rsxSetBlendEnable
+#define cellGcmSetBlendFunc                     rsxSetBlendFunc
+#define cellGcmSetBlendEquation                 rsxSetBlendEquation
+#define cellGcmSetVertexProgramConstants        rsxSetVertexProgramConstants
+#define cellGcmSetVertexDataArray               rsxSetVertexDataArray
+#define cellGcmSetScissor                       rsxSetScissor
+#define cellGcmSetTexture                       rsxSetTexture
+#define cellGcmSetTextureControl                rsxSetTextureControl
+#define cellGcmSetTextureFilter                 rsxSetTextureFilter
+#define cellGcmSetTextureAddress                rsxSetTextureAddress
+#define cellGcmSetDrawIndexArray                rsxSetDrawIndexArray
 #else
-// Sony LibGCM or custom homebrew environment
 #include <cell/gcm.h>
-#define PS3_GCM_PREFIX(x) cellGcm##x
 #endif
 
 //-----------------------------------------------------------------------------
 // RSX Shader Microcode (Self-contained, no external Cg compiler needed)
 //-----------------------------------------------------------------------------
-// Vertex Program: Multiplies float2 pos with float4x4 ortho matrix, passes UV & Color
-// Fragment Program: Samples 2D texture and modulates with interpolated vertex color
-//-----------------------------------------------------------------------------
-
-// NV47/RSX Vertex Shader Microcode (vp40 profile)
 static const uint32_t g_VertexProgramUCode[] = {
     0x10001bf8, 0x00401801, 0x1bf80040, 0x18012061,
     0x00000000, 0x00000000, 0x00000000, 0x00000000,
@@ -35,18 +62,15 @@ static const uint32_t g_VertexProgramUCode[] = {
     0x00000000, 0x00000000, 0x00000000, 0x00000000
 };
 
-// NV47/RSX Fragment Shader Microcode (fp40 profile)
 static const uint32_t g_FragmentProgramUCode[] = {
     0x00000000, 0x00000000, 0x00000000, 0x00000000,
     0x0140c3fc, 0x40028800, 0x00000002, 0x00000000
 };
 
-// Internal Backend Data
 struct ImGui_ImplPS3RSX_Data
 {
     gcmContextData* GcmContext;
 
-    // Triple buffering in mapped main memory (XDR) to avoid GPU pipeline stalls
     static const int BufferCount = 3;
     int              CurrentFrameIndex;
 
@@ -57,12 +81,10 @@ struct ImGui_ImplPS3RSX_Data
     uint32_t         VertexBufferOffset[BufferCount];
     uint32_t         IndexBufferOffset[BufferCount];
 
-    // RSX Shader handles
     void*            VertexProgram;
     void*            FragmentProgram;
-    uint32_t         FragmentProgramOffset; // Fragment microcode must reside in Local VRAM
+    uint32_t         FragmentProgramOffset;
 
-    // Font Texture in RSX Local Memory (VRAM)
     uint32_t         FontTextureOffset;
     gcmTexture       FontTexture;
 
@@ -74,10 +96,6 @@ static ImGui_ImplPS3RSX_Data* ImGui_ImplPS3RSX_GetBackendData()
     return ImGui::GetCurrentContext() ? (ImGui_ImplPS3RSX_Data*)ImGui::GetIO().BackendRendererUserData : nullptr;
 }
 
-//-----------------------------------------------------------------------------
-// Functions
-//-----------------------------------------------------------------------------
-
 bool ImGui_ImplPS3RSX_Init(gcmContextData* context)
 {
     ImGuiIO& io = ImGui::GetIO();
@@ -86,14 +104,13 @@ bool ImGui_ImplPS3RSX_Init(gcmContextData* context)
     ImGui_ImplPS3RSX_Data* bd = IM_NEW(ImGui_ImplPS3RSX_Data)();
     io.BackendRendererUserData = (void*)bd;
     io.BackendRendererName = "imgui_impl_ps3rsx";
-    io.BackendFlags |= ImGuiBackendFlags_RendererHasVtxOffset; // Supports 16-bit indices with base vertex offset
+    io.BackendFlags |= ImGuiBackendFlags_RendererHasVtxOffset;
 
     bd->GcmContext = context;
     bd->CurrentFrameIndex = 0;
     bd->VertexBufferSize = 10000 * sizeof(ImDrawVert);
     bd->IndexBufferSize  = 20000 * sizeof(ImDrawIdx);
 
-    // Allocate geometry buffers in mapped Host Memory (CELL_GCM_LOCATION_MAIN)
     for (int i = 0; i < ImGui_ImplPS3RSX_Data::BufferCount; i++)
     {
 #if defined(__PSL1GHT__) || defined(PSL1GHT)
@@ -137,7 +154,7 @@ void ImGui_ImplPS3RSX_Shutdown()
 void ImGui_ImplPS3RSX_NewFrame()
 {
     ImGui_ImplPS3RSX_Data* bd = ImGui_ImplPS3RSX_GetBackendData();
-    IM_ASSERT(bd != nullptr && "Context or backend not initialized! Did you call ImGui_ImplPS3RSX_Init()?");
+    IM_ASSERT(bd != nullptr && "Context or backend not initialized!");
 
     if (!bd->FontTextureOffset)
         ImGui_ImplPS3RSX_CreateFontsTexture();
@@ -152,11 +169,9 @@ bool ImGui_ImplPS3RSX_CreateFontsTexture()
     int width, height;
     io.Fonts->GetTexDataAsRGBA32(&pixels, &width, &height);
 
-    // RSX texture pitch must be aligned to 64 bytes
     uint32_t pitch = (width * 4 + 63) & ~63;
     uint32_t tex_size = pitch * height;
 
-    // Allocate font texture in RSX Local Memory (VRAM)
 #if defined(__PSL1GHT__) || defined(PSL1GHT)
     void* vram_ptr = rsxMemalign(128, tex_size);
     rsxAddressToOffset(vram_ptr, &bd->FontTextureOffset);
@@ -165,7 +180,6 @@ bool ImGui_ImplPS3RSX_CreateFontsTexture()
     cellGcmAddressToOffset(vram_ptr, &bd->FontTextureOffset);
 #endif
 
-    // Convert RGBA32 (ImGui default) to ARGB32 (RSX native format) row by row
     uint8_t* dst = (uint8_t*)vram_ptr;
     for (int y = 0; y < height; ++y)
     {
@@ -181,20 +195,12 @@ bool ImGui_ImplPS3RSX_CreateFontsTexture()
         }
     }
 
-    // Configure RSX Texture Descriptor
     memset(&bd->FontTexture, 0, sizeof(bd->FontTexture));
-    bd->FontTexture.format    = CELL_GCM_TEXTURE_A8R8G8B8 | CELL_GCM_TEXTURE_LN; // Linear pitch
+    bd->FontTexture.format    = CELL_GCM_TEXTURE_A8R8G8B8;
     bd->FontTexture.mipmap    = 1;
     bd->FontTexture.dimension = CELL_GCM_TEXTURE_DIMS_2D;
     bd->FontTexture.cubemap   = CELL_GCM_FALSE;
-    bd->FontTexture.remap     = ((CELL_GCM_TEXTURE_REMAP_REMAP << 14) |
-                                 (CELL_GCM_TEXTURE_REMAP_REMAP << 12) |
-                                 (CELL_GCM_TEXTURE_REMAP_REMAP << 10) |
-                                 (CELL_GCM_TEXTURE_REMAP_REMAP << 8)  |
-                                 (CELL_GCM_TEXTURE_REMAP_FROM_B << 6) |
-                                 (CELL_GCM_TEXTURE_REMAP_FROM_G << 4) |
-                                 (CELL_GCM_TEXTURE_REMAP_FROM_R << 2) |
-                                 (CELL_GCM_TEXTURE_REMAP_FROM_A));
+    bd->FontTexture.remap     = 0xAAE4; // Standard ARGB remap
     bd->FontTexture.width     = width;
     bd->FontTexture.height    = height;
     bd->FontTexture.depth     = 1;
@@ -221,7 +227,6 @@ bool ImGui_ImplPS3RSX_CreateDeviceObjects()
 {
     ImGui_ImplPS3RSX_Data* bd = ImGui_ImplPS3RSX_GetBackendData();
 
-    // Copy Fragment Shader microcode into Local VRAM (RSX hardware requirement)
     uint32_t fp_size = sizeof(g_FragmentProgramUCode);
 #if defined(__PSL1GHT__) || defined(PSL1GHT)
     void* fp_vram = rsxMemalign(64, fp_size);
@@ -269,7 +274,6 @@ void ImGui_ImplPS3RSX_RenderDrawData(ImDrawData* draw_data)
         idx_dst += cmd_list->IdxBuffer.Size;
     }
 
-    // 1. Pipeline States
     cellGcmSetDepthTestEnable(ctx, CELL_GCM_FALSE);
     cellGcmSetDepthMask(ctx, CELL_GCM_FALSE);
     cellGcmSetCullFaceEnable(ctx, CELL_GCM_FALSE);
@@ -278,7 +282,6 @@ void ImGui_ImplPS3RSX_RenderDrawData(ImDrawData* draw_data)
                              CELL_GCM_SRC_ALPHA, CELL_GCM_ONE_MINUS_SRC_ALPHA);
     cellGcmSetBlendEquation(ctx, CELL_GCM_FUNC_ADD, CELL_GCM_FUNC_ADD);
 
-    // 2. Ortho Projection Matrix for RSX
     float L = draw_data->DisplayPos.x;
     float R = draw_data->DisplayPos.x + draw_data->DisplaySize.x;
     float T = draw_data->DisplayPos.y;
@@ -291,11 +294,6 @@ void ImGui_ImplPS3RSX_RenderDrawData(ImDrawData* draw_data)
     };
     cellGcmSetVertexProgramConstants(ctx, 0, 4, (float*)ortho_proj);
 
-    // 3. Bind Shaders
-    cellGcmSetVertexProgram(ctx, (CGprogram)bd->VertexProgram);
-    cellGcmSetFragmentProgram(ctx, (CGprogram)bd->FragmentProgram, bd->FragmentProgramOffset);
-
-    // 4. Bind Vertex Attributes (Pos: Slot 0, UV: Slot 1, Color: Slot 2)
     uint32_t vtx_base_offset = bd->VertexBufferOffset[buf_idx];
     uint32_t idx_base_offset = bd->IndexBufferOffset[buf_idx];
 
@@ -306,7 +304,6 @@ void ImGui_ImplPS3RSX_RenderDrawData(ImDrawData* draw_data)
     cellGcmSetVertexDataArray(ctx, 2, 0, sizeof(ImDrawVert), 4, CELL_GCM_VERTEX_UB,
                              CELL_GCM_LOCATION_MAIN, vtx_base_offset + offsetof(ImDrawVert, col));
 
-    // 5. Draw Commands
     int global_vtx_offset = 0;
     int global_idx_offset = 0;
     ImVec2 clip_off = draw_data->DisplayPos;

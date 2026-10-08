@@ -3,64 +3,71 @@
 # Supports: PSL1GHT v2 / OpenPS3 (CFW + HFW / PS3HEN compatible)
 #---------------------------------------------------------------------------------
 
-.SUFFIXES:
-ifeq ($(strip $(PSL1GHT)),)
-$(error "Please set PSL1GHT in your environment. export PSL1GHT=<path>")
+ifeq ($(strip $(PS3DEV)),)
+  export PS3DEV := /opt/ps3dev
 endif
 
-include $(PSL1GHT)/host/rules/ps3.rules
+ifeq ($(strip $(PSL1GHT)),)
+  export PSL1GHT := $(PS3DEV)
+endif
 
-TARGET          := imgui_ps3_demo
-CONTENT_ID      := UP0001-IMGU00001_00-0000000000000000
-TITLE           := Dear ImGui PS3
+export PATH := $(PS3DEV)/bin:$(PS3DEV)/ppu/bin:$(PATH)
 
-IMGUI_DIR       := ../..
-BACKEND_DIR     := ../../backends
+TARGET    := imgui_ps3_demo
+TITLE     := Dear ImGui PS3
+APPID     := IMGU00001
+CONTENTID := UP0001-$(APPID)_00-0000000000000000
 
-SRCS_C          := 
-SRCS_CXX        := main.cpp \
-                   $(BACKEND_DIR)/imgui_impl_ps3rsx.cpp \
-                   $(BACKEND_DIR)/imgui_impl_ps3pad.cpp \
-                   $(IMGUI_DIR)/imgui.cpp \
-                   $(IMGUI_DIR)/imgui_draw.cpp \
-                   $(IMGUI_DIR)/imgui_tables.cpp \
-                   $(IMGUI_DIR)/imgui_widgets.cpp \
-                   $(IMGUI_DIR)/imgui_demo.cpp
+IMGUI_DIR   := ../..
+BACKEND_DIR := ../../backends
 
-OBJS            := $(SRCS_C:.c=.o) $(SRCS_CXX:.cpp=.o)
+CXX       := ppu-g++
+CC        := ppu-gcc
 
-CXXFLAGS        := -O2 -Wall -mcpu=cell -D__PS3__ -D__PSL1GHT__ \
-                   -I$(IMGUI_DIR) -I$(BACKEND_DIR) -I$(PSL1GHT)/include
+SRCS_CXX  := main.cpp \
+             $(BACKEND_DIR)/imgui_impl_ps3rsx.cpp \
+             $(BACKEND_DIR)/imgui_impl_ps3pad.cpp \
+             $(IMGUI_DIR)/imgui.cpp \
+             $(IMGUI_DIR)/imgui_draw.cpp \
+             $(IMGUI_DIR)/imgui_tables.cpp \
+             $(IMGUI_DIR)/imgui_widgets.cpp \
+             $(IMGUI_DIR)/imgui_demo.cpp
 
-CFLAGS          := -O2 -Wall -mcpu=cell -D__PS3__ -D__PSL1GHT__ \
-                   -I$(IMGUI_DIR) -I$(BACKEND_DIR) -I$(PSL1GHT)/include
+OBJS      := $(SRCS_CXX:.cpp=.o)
 
-LDFLAGS         := -L$(PSL1GHT)/lib -lrsx -lgcm_sys -lpad -lio -lsysutil -lm
+CXXFLAGS  := -O2 -Wall -mcpu=cell -D__PS3__ -D__PSL1GHT__ \
+             -I$(IMGUI_DIR) -I$(BACKEND_DIR) -I$(PSL1GHT)/ppu/include
 
-.PHONY: all clean pkg
+CFLAGS    := -O2 -Wall -mcpu=cell -D__PS3__ -D__PSL1GHT__ \
+             -I$(IMGUI_DIR) -I$(BACKEND_DIR) -I$(PSL1GHT)/ppu/include
 
-all: $(TARGET).elf $(TARGET).self
+LIBS      := -L$(PSL1GHT)/ppu/lib -lrsx -lgcm_sys -lio -lsysutil -lm
+
+.PHONY: all clean
+
+all: $(TARGET).elf $(TARGET).self $(TARGET).pkg
 
 $(TARGET).elf: $(OBJS)
 	@echo "Linking ELF: $@"
-	$(CXX) $(OBJS) $(LDFLAGS) -o $@
+	$(CXX) $(OBJS) $(LIBS) -o $@
+
+%.o: %.cpp
+	@echo "Compiling: $<"
+	$(CXX) $(CXXFLAGS) -c $< -o $@
 
 $(TARGET).self: $(TARGET).elf
-	@echo "Creating FSELF for CFW & HEN: $@"
-	make_fself $< EBOOT.BIN
-	cp EBOOT.BIN $@
+	@echo "Creating SELF: $@"
+	make_fself $< $@
+	cp $@ EBOOT.BIN
 
-pkg: $(TARGET).self
-	@echo "Building PKG file..."
-	mkdir -p pkg/USRDIR
-	cp EBOOT.BIN pkg/USRDIR/
-	echo "Content-ID = $(CONTENT_ID)" > package.conf
-	echo "k_licensee = 0x00000000000000000000000000000000" >> package.conf
-	echo "DRM_Type = Free" >> package.conf
-	echo "Content_Type = Game_Exec" >> package.conf
-	echo "Package_Version = 01.00" >> package.conf
-	pkg.py --contentid $(CONTENT_ID) pkg/ $(TARGET).pkg
+$(TARGET).pkg: $(TARGET).self
+	@echo "Creating PKG: $@"
+	mkdir -p build/pkg/USRDIR
+	cp EBOOT.BIN build/pkg/USRDIR/
+	cp $(PS3DEV)/bin/ICON0.PNG build/pkg/ICON0.PNG 2>/dev/null || true
+	sfo --title "$(TITLE)" --appid "$(APPID)" -f $(PS3DEV)/bin/sfo.xml build/pkg/PARAM.SFO 2>/dev/null || true
+	pkg --contentid $(CONTENTID) build/pkg/ $@ 2>/dev/null || true
 
 clean:
-	rm -f $(OBJS) $(TARGET).elf $(TARGET).self EBOOT.BIN $(TARGET).pkg package.conf
-	rm -rf pkg
+	rm -f $(OBJS) $(TARGET).elf $(TARGET).self $(TARGET).pkg EBOOT.BIN
+	rm -rf build
