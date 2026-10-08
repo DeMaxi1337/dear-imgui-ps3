@@ -69,6 +69,6 @@ ImGui::DestroyContext();
 
 ---
 
-## 📦 Automated Builds
+## How to build
 
 Automated compilation and packaging into `.pkg` and `.sprx` are handled via [GitHub Actions](.github/workflows/build.yml). Every push to `main` produces downloadable artifacts.
