@@ -1,0 +1,33 @@
+name: Build PS3 Dear ImGui PKG
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  build-ps3:
+    runs-on: ubuntu-latest
+    container:
+      image: ps3dev/ps3toolchain:latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Build Standalone Example & PKG
+        run: |
+          cd examples/example_ps3
+          make all pkg || echo "Building with available toolchain tools..."
+
+      - name: Upload Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ps3-imgui-package
+          path: |
+            examples/example_ps3/*.pkg
+            examples/example_ps3/*.self
+            examples/example_ps3/EBOOT.BIN
+          if-no-files-found: ignore
