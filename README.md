@@ -1,14 +1,12 @@
-# Dear ImGui — PlayStation 3 (RSX / DualShock 3)
+# Dear ImGui - PlayStation 3
 
-[![Build PS3 Dear ImGui PKG](https://github.com/DeMaxi1337/dear-imgui-ps3/actions/workflows/build.yml/badge.svg)](https://github.com/DeMaxi1337/dear-imgui-ps3/actions/workflows/build.yml)
+[![Build PS3 PKG](https://github.com/DeMaxi1337/dear-imgui-ps3/actions/workflows/build.yml/badge.svg)](https://github.com/DeMaxi1337/dear-imgui-ps3/actions/workflows/build.yml)
 
 Full adaptation of **Dear ImGui (1.9x)** for the **Sony PlayStation 3** architecture (Cell Broadband Engine + RSX Reality Synthesizer + DualShock 3).
 
-Designed for **homebrew applications**, **debugging tools**, and **in-game overlays / trainers (SPRX)** on both **CFW (Evilnat, Rebug)** and **HFW (PS3HEN)**.
-
 ---
 
-## 🎮 DualShock 3 Controls
+## Gamepad controls
 
 | Button | ImGui Action | Description |
 |---|---|---|
@@ -21,18 +19,17 @@ Designed for **homebrew applications**, **debugging tools**, and **in-game overl
 
 ---
 
-## ⚡ PlayStation 3 Architecture Features
+## PlayStation 3 architecture features
 
-* **Big-Endian Color Packing (`imconfig.h`)**: Corrects PowerPC 64-bit Big-Endian color layout (`IM_COL32_R_SHIFT 24`, `G_SHIFT 16`, `B_SHIFT 8`, `A_SHIFT 0`) for hardware `[R, G, B, A]` memory representation. Zero CPU overhead, no blue/red color swap.
-* **16-Bit Indices (`ImDrawIdx`)**: Configured as `unsigned short`, natively matching RSX hardware `CELL_GCM_DRAW_INDEX_ARRAY_TYPE_16`.
-* **Triple-Buffered Dynamic Geometry**: Vertices and indices are streamed through mapped Host Memory (`CELL_GCM_LOCATION_MAIN`), preventing GPU/CPU stalls.
-* **Hardware Scissor Clipping**: Top-Left RSX coordinate system matches ImGui screen space directly without Y-inversion.
-* **In-Game Input Filtering**: `ImGui_ImplPS3Pad_FilterGameInput` prevents game character actions while navigating the menu.
-* **Render State Preservation**: `SaveRenderState` / `RestoreRenderState` allows safe in-game hooking without corrupting host game graphics.
+* **Big-Endian color packing (`imconfig.h`)**: Corrects PowerPC 64-bit Big-Endian color layout (`IM_COL32_R_SHIFT 24`, `G_SHIFT 16`, `B_SHIFT 8`, `A_SHIFT 0`) for hardware `[R, G, B, A]` memory representation. Zero CPU overhead, no blue/red color swap.
+* **16-Bit indices (`ImDrawIdx`)**: Configured as `unsigned short`, natively matching RSX hardware `CELL_GCM_DRAW_INDEX_ARRAY_TYPE_16`.
+* **Hardware scissor clipping**: Top-Left RSX coordinate system matches ImGui screen space directly without Y-inversion.
+* **In-Game input filtering**: `ImGui_ImplPS3Pad_FilterGameInput` prevents game character actions while navigating the menu.
+* **Render state preservation**: `SaveRenderState` / `RestoreRenderState` allows safe in-game hooking without corrupting host game graphics.
 
 ---
 
-## 🚀 Quick Start in C++
+## C++ example
 
 ```cpp
 #include "imgui.h"
