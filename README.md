@@ -52,8 +52,8 @@ ImGui::NewFrame();
 // Render your UI
 ImGui::Begin("PS3 Developer Menu");
 ImGui::Text("Hello PS3!");
-static bool godMode = false;
-ImGui::Checkbox("God Mode", &godMode);
+static bool aimbot = false;
+ImGui::Checkbox("Aimbot", &aimbot);
 ImGui::End();
 
 // Draw cursor & geometry
