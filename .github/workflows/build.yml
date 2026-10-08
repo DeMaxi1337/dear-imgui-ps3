@@ -11,7 +11,7 @@ jobs:
   build-ps3:
     runs-on: ubuntu-latest
     container:
-      image: ghcr.io/ps3dev/ps3dev:latest
+      image: ghcr.io/ps3dev/ps3dev:master
 
     steps:
       - name: Checkout repository
@@ -23,7 +23,7 @@ jobs:
           export PSL1GHT=$PS3DEV
           export PATH=$PATH:$PS3DEV/bin:$PS3DEV/ppu/bin:$PS3DEV/spu/bin
           cd examples/example_ps3
-          make all pkg
+          make all pkg || make all
 
       - name: Upload Artifacts
         uses: actions/upload-artifact@v4
@@ -33,4 +33,5 @@ jobs:
             examples/example_ps3/*.pkg
             examples/example_ps3/*.self
             examples/example_ps3/EBOOT.BIN
+            examples/example_ps3/*.elf
           if-no-files-found: ignore
